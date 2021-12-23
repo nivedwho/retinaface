@@ -9,6 +9,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import tensorflow as tf
 import cv2
+import time
 
 from retinaface.model import retinaface_model
 from retinaface.commons import preprocess, postprocess
@@ -85,8 +86,7 @@ def detect_faces(img_path, threshold=0.9, model = None, allow_upscaling = True):
 
     proposals_list = []
     scores_list = []
-    landmarks_list = []
-    im_tensor, im_info, im_scale = preprocess.preprocess_image(img, allow_upscaling)
+    im_tensor, im_info, im_scale = preprocess.preprocess_image(img)
     net_out = model(im_tensor)
     net_out = [elt.numpy() for elt in net_out]
     sym_idx = 0
@@ -129,15 +129,7 @@ def detect_faces(img_path, threshold=0.9, model = None, allow_upscaling = True):
         proposals[:, 0:4] /= im_scale
         proposals_list.append(proposals)
         scores_list.append(scores)
-
-        landmark_deltas = net_out[sym_idx + 2]
-        landmark_pred_len = landmark_deltas.shape[3]//A
-        landmark_deltas = landmark_deltas.reshape((-1, 5, landmark_pred_len//5))
-        landmarks = postprocess.landmark_pred(anchors, landmark_deltas)
-        landmarks = landmarks[order, :]
-
-        landmarks[:, :, 0:2] /= im_scale
-        landmarks_list.append(landmarks)
+        
         sym_idx += 3
 
     proposals = np.vstack(proposals_list)
@@ -150,8 +142,6 @@ def detect_faces(img_path, threshold=0.9, model = None, allow_upscaling = True):
 
     proposals = proposals[order, :]
     scores = scores[order]
-    landmarks = np.vstack(landmarks_list)
-    landmarks = landmarks[order].astype(np.float32, copy=False)
 
     pre_det = np.hstack((proposals[:,0:4], scores)).astype(np.float32, copy=False)
 
@@ -161,7 +151,6 @@ def detect_faces(img_path, threshold=0.9, model = None, allow_upscaling = True):
 
     det = np.hstack( (pre_det, proposals[:,4:]) )
     det = det[keep, :]
-    landmarks = landmarks[keep]
 
     resp = {}
     for idx, face in enumerate(det):
@@ -171,14 +160,7 @@ def detect_faces(img_path, threshold=0.9, model = None, allow_upscaling = True):
         resp[label]["score"] = face[4]
 
         resp[label]["facial_area"] = list(face[0:4].astype(int))
-
-        resp[label]["landmarks"] = {}
-        resp[label]["landmarks"]["right_eye"] = list(landmarks[idx][0])
-        resp[label]["landmarks"]["left_eye"] = list(landmarks[idx][1])
-        resp[label]["landmarks"]["nose"] = list(landmarks[idx][2])
-        resp[label]["landmarks"]["mouth_right"] = list(landmarks[idx][3])
-        resp[label]["landmarks"]["mouth_left"] = list(landmarks[idx][4])
-
+        
     return resp
 
 def extract_faces(img_path, threshold=0.9, model = None, align = True, allow_upscaling = True):
@@ -214,3 +196,10 @@ def extract_faces(img_path, threshold=0.9, model = None, align = True, allow_ups
     #elif type(obj) == tuple:
 
     return resp
+
+if __name__ =='__main__':
+    dir = 'JPG4/'
+    s = time.time()
+    for i in os.listdir(dir):
+        detect_faces(dir + i)
+    print(time.time() - s)
